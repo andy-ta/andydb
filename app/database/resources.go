@@ -5,24 +5,25 @@ import (
 )
 
 type Resources struct {
-	database map[string]entries
+	database map[string]*Entries
 }
 
 func NewDatabase() Resources {
-	return Resources{make(map[string]entries)}
+	return Resources{make(map[string]*Entries)}
 }
 
-func (r *Resources) NewResource(name string) (Resources, error) {
-	if r.Exists(name) {
-		r.database[name] = NewEntry()
-		return *r, _
+func (r *Resources) NewResource(name string) (*Resources, error) {
+	if !r.Exists(name) {
+		entry := NewEntry()
+		r.database[name] = &entry
+		return r, nil
 	} else {
 		err := fmt.Errorf("resource %q already exists", name)
-		return _, err
+		return nil, err
 	}
 }
 
-func (r *Resources) Get(name string) entries {
+func (r *Resources) Get(name string) *Entries {
 	return r.database[name]
 }
 
