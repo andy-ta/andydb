@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/andy-ta/andydb/app/database"
 	"github.com/gorilla/mux"
 	"io/ioutil"
@@ -10,6 +11,28 @@ import (
 
 func HelloWorld(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, "{ \"hello\": \"World\")")
+}
+
+func Get(w http.ResponseWriter, r *http.Request, database database.Resources) {
+	var err error
+	var response interface{}
+	vars := mux.Vars(r)
+	resourceName := vars["resource"]
+	key := vars["id"]
+
+	if result := database.Get(resourceName); result != nil {
+		if response = result.Read(key); response != nil {
+			respondJSON(w, http.StatusOK, response)
+		} else {
+			err = fmt.Errorf("id %q does not exist", key)
+		}
+	} else {
+		err = fmt.Errorf("resource %q does not exist", resourceName)
+	}
+
+	if err != nil {
+		respondError(w, http.StatusNotFound, err.Error())
+	}
 }
 
 // TODO: Error handling is so strange in Go?

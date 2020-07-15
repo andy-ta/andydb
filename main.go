@@ -8,5 +8,5 @@ func main() {
 
 	server := &app.App{}
 	server.Initialize()
-	server.Run(":8080")
+	server.Run(":42069")
 }

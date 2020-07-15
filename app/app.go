@@ -22,7 +22,7 @@ func (a *App) Initialize() {
 
 func (a *App) setRouters() {
 	r := a.Router.PathPrefix("/api").Subrouter()
-	r.HandleFunc("/{resource}/{id}", handler.HelloWorld).Methods("GET")
+	r.HandleFunc("/{resource}/{id}", a.handleRequest(handler.Get)).Methods("GET")
 	r.HandleFunc("/{resource}", handler.HelloWorld).Methods("GET")
 	r.HandleFunc("/{resource}", a.handleRequest(handler.Create)).Methods("POST")
 	r.HandleFunc("/{resource}/{id}", handler.HelloWorld).Methods("PUT")
