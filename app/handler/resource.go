@@ -56,7 +56,33 @@ func GetAll(w http.ResponseWriter, r *http.Request, database database.Resources)
 	}
 }
 
-// TODO: Error handling is so strange in Go?
+func Update(w http.ResponseWriter, r *http.Request, database database.Resources) {
+	var err error
+	var response interface{}
+	vars := mux.Vars(r)
+	resourceName := vars["resource"]
+	key := vars["id"]
+
+	if result := database.Get(resourceName); result != nil {
+		body, err := getBody(r)
+		if err == nil {
+			if response = result.Update(key, body); response != nil {
+				respondJSON(w, http.StatusOK, response)
+			} else {
+				err = fmt.Errorf("id %q does not exist", key)
+			}
+		} else {
+			err = fmt.Errorf("invalid body %q", body)
+		}
+	} else {
+		err = fmt.Errorf("resource %q does not exist", resourceName)
+	}
+
+	if err != nil {
+		respondError(w, http.StatusNotFound, err.Error())
+	}
+}
+
 func Create(w http.ResponseWriter, r *http.Request, database database.Resources) {
 	var err error
 	var result interface{}
@@ -71,11 +97,7 @@ func Create(w http.ResponseWriter, r *http.Request, database database.Resources)
 	}
 
 	// Create the entry
-	var entry interface{}
-	body, e := ioutil.ReadAll(r.Body)
-	err = e
-	bodyString := string(body)
-	e = json.Unmarshal([]byte(bodyString), &entry)
+	entry, err := getBody(r)
 	result = database.Get(resourceName).Create(entry)
 
 	if err == nil {
@@ -83,4 +105,12 @@ func Create(w http.ResponseWriter, r *http.Request, database database.Resources)
 	} else {
 		respondError(w, http.StatusConflict, err.Error())
 	}
+}
+
+func getBody(r *http.Request) (interface{}, error) {
+	var entry interface{}
+	body, e := ioutil.ReadAll(r.Body)
+	bodyString := string(body)
+	e = json.Unmarshal([]byte(bodyString), &entry)
+	return entry, e
 }

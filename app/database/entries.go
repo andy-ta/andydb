@@ -22,7 +22,7 @@ func (e *Entries) Create(value interface{}) interface{} {
 	key := b64.StdEncoding.EncodeToString([]byte(strconv.FormatInt(now, 10)))[0:15]
 	// Set ID
 	if err := dyno.Set(value, key, "_id"); err != nil {
-		fmt.Printf("Failed to set password: %v\n", err)
+		fmt.Printf("Failed to set _id: %v\n", err)
 	}
 	e.database[key] = value
 	return e.database[key]
@@ -41,6 +41,10 @@ func (e *Entries) ReadAll() []interface{} {
 }
 
 func (e *Entries) Update(key string, value interface{}) interface{} {
+	// Set ID
+	if err := dyno.Set(value, key, "_id"); err != nil {
+		fmt.Printf("Failed to set _id: %v\n", err)
+	}
 	e.database[key] = value
 	return e.database[key]
 }
