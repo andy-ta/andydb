@@ -9,12 +9,9 @@ import (
 	"net/http"
 )
 
-func HelloWorld(w http.ResponseWriter, r *http.Request) {
-	respondJSON(w, http.StatusOK, "{ \"hello\": \"World\")")
-}
-
 func Get(w http.ResponseWriter, r *http.Request, database database.Resources) {
 	var err error
+	code := http.StatusInternalServerError
 	var response interface{}
 	vars := mux.Vars(r)
 	resourceName := vars["resource"]
@@ -24,19 +21,22 @@ func Get(w http.ResponseWriter, r *http.Request, database database.Resources) {
 		if response = result.Read(key); response != nil {
 			respondJSON(w, http.StatusOK, response)
 		} else {
+			code = http.StatusNotFound
 			err = fmt.Errorf("id %q does not exist", key)
 		}
 	} else {
+		code = http.StatusNotFound
 		err = fmt.Errorf("resource %q does not exist", resourceName)
 	}
 
 	if err != nil {
-		respondError(w, http.StatusNotFound, err.Error())
+		respondError(w, code, err.Error())
 	}
 }
 
 func GetAll(w http.ResponseWriter, r *http.Request, database database.Resources) {
 	var err error
+	code := http.StatusInternalServerError
 	var response []interface{}
 	vars := mux.Vars(r)
 	resourceName := vars["resource"]
@@ -48,16 +48,18 @@ func GetAll(w http.ResponseWriter, r *http.Request, database database.Resources)
 			err = fmt.Errorf("entries for %q not found", resourceName)
 		}
 	} else {
+		code = http.StatusNotFound
 		err = fmt.Errorf("resource %q does not exist", resourceName)
 	}
 
 	if err != nil {
-		respondError(w, http.StatusNotFound, err.Error())
+		respondError(w, code, err.Error())
 	}
 }
 
 func Update(w http.ResponseWriter, r *http.Request, database database.Resources) {
 	var err error
+	code := http.StatusInternalServerError
 	var response interface{}
 	vars := mux.Vars(r)
 	resourceName := vars["resource"]
@@ -69,17 +71,43 @@ func Update(w http.ResponseWriter, r *http.Request, database database.Resources)
 			if response = result.Update(key, body); response != nil {
 				respondJSON(w, http.StatusOK, response)
 			} else {
+				code = http.StatusNotFound
 				err = fmt.Errorf("id %q does not exist", key)
 			}
 		} else {
+			code = http.StatusBadRequest
 			err = fmt.Errorf("invalid body %q", body)
 		}
 	} else {
+		code = http.StatusNotFound
 		err = fmt.Errorf("resource %q does not exist", resourceName)
 	}
 
 	if err != nil {
-		respondError(w, http.StatusNotFound, err.Error())
+		respondError(w, code, err.Error())
+	}
+}
+
+func Delete(w http.ResponseWriter, r *http.Request, database database.Resources) {
+	var err error
+	code := http.StatusInternalServerError
+	vars := mux.Vars(r)
+	resourceName := vars["resource"]
+	key := vars["id"]
+
+	if result := database.Get(resourceName); result != nil {
+		if deleted := result.Del(key); deleted {
+			respondJSON(w, http.StatusNoContent, nil)
+		} else {
+			err = fmt.Errorf("failed to delete id %q", key)
+		}
+	} else {
+		code = http.StatusBadRequest
+		err = fmt.Errorf("resource %q does not exist", resourceName)
+	}
+
+	if err != nil {
+		respondError(w, code, err.Error())
 	}
 }
 

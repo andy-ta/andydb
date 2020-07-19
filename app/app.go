@@ -26,7 +26,7 @@ func (a *App) setRouters() {
 	r.HandleFunc("/{resource}", a.handleRequest(handler.GetAll)).Methods("GET")
 	r.HandleFunc("/{resource}", a.handleRequest(handler.Create)).Methods("POST")
 	r.HandleFunc("/{resource}/{id}", a.handleRequest(handler.Update)).Methods("PUT")
-	r.HandleFunc("/{resource}/{id}", handler.HelloWorld).Methods("DELETE")
+	r.HandleFunc("/{resource}/{id}", a.handleRequest(handler.Delete)).Methods("DELETE")
 }
 
 func (a *App) Run(host string) {

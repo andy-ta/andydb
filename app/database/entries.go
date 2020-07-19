@@ -52,5 +52,5 @@ func (e *Entries) Update(key string, value interface{}) interface{} {
 func (e *Entries) Del(key string) bool {
 	delete(e.database, key)
 	_, prs := e.database[key]
-	return prs
+	return !prs
 }
