@@ -32,6 +32,14 @@ func (e *Entries) Read(key string) interface{} {
 	return e.database[key]
 }
 
+func (e *Entries) ReadAll() []interface{} {
+	values := make([]interface{}, 0, len(e.database))
+	for _, val := range e.database {
+		values = append(values, val)
+	}
+	return values
+}
+
 func (e *Entries) Update(key string, value interface{}) interface{} {
 	e.database[key] = value
 	return e.database[key]

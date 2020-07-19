@@ -35,6 +35,27 @@ func Get(w http.ResponseWriter, r *http.Request, database database.Resources) {
 	}
 }
 
+func GetAll(w http.ResponseWriter, r *http.Request, database database.Resources) {
+	var err error
+	var response []interface{}
+	vars := mux.Vars(r)
+	resourceName := vars["resource"]
+
+	if result := database.Get(resourceName); result != nil {
+		if response = result.ReadAll(); response != nil {
+			respondJSON(w, http.StatusOK, response)
+		} else {
+			err = fmt.Errorf("entries for %q not found", resourceName)
+		}
+	} else {
+		err = fmt.Errorf("resource %q does not exist", resourceName)
+	}
+
+	if err != nil {
+		respondError(w, http.StatusNotFound, err.Error())
+	}
+}
+
 // TODO: Error handling is so strange in Go?
 func Create(w http.ResponseWriter, r *http.Request, database database.Resources) {
 	var err error
