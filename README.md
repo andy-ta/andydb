@@ -23,7 +23,7 @@ With the `_id` you may now perform a GET / PUT / DELETE requests in the format o
 - PUT `http://localhost:42069/api/contacts/{_id}` 
   - `curl -X PUT -d '{"email": "db@andy.db"}' http://localhost:42069/api/contacts/{_id}`
 - DELETE `http://localhost:42069/api/contacts/{_id}` (
-  - `curl -X PUT http://localhost:42069/api/contacts/{_id}`
+- `curl -X DELETE http://localhost:42069/api/contacts/{_id}`
 
 If you don't provide the id for a GET request, it will return all entries of the resource.
 
