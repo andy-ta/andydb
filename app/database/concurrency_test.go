@@ -57,15 +57,15 @@ func TestEntriesConcurrentCreate(t *testing.T) {
 		}
 		ids[id] = struct{}{}
 
-		worker, ok := record["worker"].(float64)
+		worker, ok := numberAsInt(record["worker"])
 		if !ok {
 			t.Fatalf("expected numeric worker field, got %#v", record["worker"])
 		}
-		sequence, ok := record["sequence"].(float64)
+		sequence, ok := numberAsInt(record["sequence"])
 		if !ok {
 			t.Fatalf("expected numeric sequence field, got %#v", record["sequence"])
 		}
-		key := fmt.Sprintf("%d:%d", int(worker), int(sequence))
+		key := fmt.Sprintf("%d:%d", worker, sequence)
 		if _, exists := seenPairs[key]; exists {
 			t.Fatalf("duplicate worker/sequence pair detected: %s", key)
 		}
@@ -156,15 +156,15 @@ func TestResourcesConcurrentWrites(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected entry to be a map, got %T", item)
 		}
-		worker, ok := record["worker"].(float64)
+		worker, ok := numberAsInt(record["worker"])
 		if !ok {
 			t.Fatalf("expected numeric worker field, got %#v", record["worker"])
 		}
-		sequence, ok := record["sequence"].(float64)
+		sequence, ok := numberAsInt(record["sequence"])
 		if !ok {
 			t.Fatalf("expected numeric sequence field, got %#v", record["sequence"])
 		}
-		key := fmt.Sprintf("%d:%d", int(worker), int(sequence))
+		key := fmt.Sprintf("%d:%d", worker, sequence)
 		if _, exists := seenPairs[key]; exists {
 			t.Fatalf("duplicate worker/sequence pair detected: %s", key)
 		}
@@ -181,5 +181,36 @@ func drainErr(errCh <-chan error) error {
 		return err
 	default:
 		return nil
+	}
+}
+
+func numberAsInt(value interface{}) (int, bool) {
+	switch v := value.(type) {
+	case int:
+		return v, true
+	case int8:
+		return int(v), true
+	case int16:
+		return int(v), true
+	case int32:
+		return int(v), true
+	case int64:
+		return int(v), true
+	case uint:
+		return int(v), true
+	case uint8:
+		return int(v), true
+	case uint16:
+		return int(v), true
+	case uint32:
+		return int(v), true
+	case uint64:
+		return int(v), true
+	case float32:
+		return int(v), true
+	case float64:
+		return int(v), true
+	default:
+		return 0, false
 	}
 }
