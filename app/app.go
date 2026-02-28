@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"runtime/debug"
 	"time"
 
 	"github.com/andy-ta/andydb/app/database"
@@ -52,6 +53,7 @@ func (a *App) Run(ctx context.Context, cfg ServerConfig) error {
 	}
 	log.Printf("AndyDB running on %s (%s mode)", cfg.Addr, mode)
 	handler := http.Handler(a.Router)
+	handler = a.recoverer(handler)
 	if cfg.DevMode {
 		handler = a.requestLogger(handler)
 	}
@@ -114,6 +116,18 @@ func (a *App) handleRequest(handler RequestHandlerFunction) http.HandlerFunc {
 func (a *App) requestLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[DEV] %s %s from %s", r.Method, r.RequestURI, r.RemoteAddr)
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (a *App) recoverer(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Printf("panic recovered: %v\n%s", rec, debug.Stack())
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+			}
+		}()
 		next.ServeHTTP(w, r)
 	})
 }
