@@ -1,6 +1,7 @@
 package database
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -37,6 +38,44 @@ func TestEntriesConcurrentCreate(t *testing.T) {
 	want := workers * perWorker
 	if got != want {
 		t.Fatalf("expected %d entries, got %d", want, got)
+	}
+
+	results := entry.ReadAll()
+	ids := make(map[string]struct{}, len(results))
+	seenPairs := make(map[string]struct{}, len(results))
+	for _, item := range results {
+		record, ok := item.(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected entry to be a map, got %T", item)
+		}
+		id, ok := record["_id"].(string)
+		if !ok || id == "" {
+			t.Fatalf("expected non-empty _id string, got %#v", record["_id"])
+		}
+		if _, exists := ids[id]; exists {
+			t.Fatalf("duplicate _id detected: %q", id)
+		}
+		ids[id] = struct{}{}
+
+		worker, ok := record["worker"].(float64)
+		if !ok {
+			t.Fatalf("expected numeric worker field, got %#v", record["worker"])
+		}
+		sequence, ok := record["sequence"].(float64)
+		if !ok {
+			t.Fatalf("expected numeric sequence field, got %#v", record["sequence"])
+		}
+		key := fmt.Sprintf("%d:%d", int(worker), int(sequence))
+		if _, exists := seenPairs[key]; exists {
+			t.Fatalf("duplicate worker/sequence pair detected: %s", key)
+		}
+		seenPairs[key] = struct{}{}
+	}
+	if len(ids) != want {
+		t.Fatalf("expected %d unique ids, got %d", want, len(ids))
+	}
+	if len(seenPairs) != want {
+		t.Fatalf("expected %d unique worker/sequence pairs, got %d", want, len(seenPairs))
 	}
 }
 
@@ -108,6 +147,31 @@ func TestResourcesConcurrentWrites(t *testing.T) {
 	want := workers * perWorker
 	if total != want {
 		t.Fatalf("expected %d records, got %d", want, total)
+	}
+
+	results := resource.ReadAll()
+	seenPairs := make(map[string]struct{}, len(results))
+	for _, item := range results {
+		record, ok := item.(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected entry to be a map, got %T", item)
+		}
+		worker, ok := record["worker"].(float64)
+		if !ok {
+			t.Fatalf("expected numeric worker field, got %#v", record["worker"])
+		}
+		sequence, ok := record["sequence"].(float64)
+		if !ok {
+			t.Fatalf("expected numeric sequence field, got %#v", record["sequence"])
+		}
+		key := fmt.Sprintf("%d:%d", int(worker), int(sequence))
+		if _, exists := seenPairs[key]; exists {
+			t.Fatalf("duplicate worker/sequence pair detected: %s", key)
+		}
+		seenPairs[key] = struct{}{}
+	}
+	if len(seenPairs) != want {
+		t.Fatalf("expected %d unique worker/sequence pairs, got %d", want, len(seenPairs))
 	}
 }
 

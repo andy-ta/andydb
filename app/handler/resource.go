@@ -16,9 +16,8 @@ func Get(w http.ResponseWriter, r *http.Request, database *database.Resources) {
 	vars := mux.Vars(r)
 	resourceName := vars["resource"]
 	key := vars["id"]
-	resource := database.Get(resourceName)
-	if resource == nil {
-		respondError(w, http.StatusNotFound, fmt.Sprintf("resource %q does not exist", resourceName))
+	resource, ok := resolveResource(w, database, resourceName, true)
+	if !ok {
 		return
 	}
 	entry := resource.Read(key)
@@ -32,9 +31,8 @@ func Get(w http.ResponseWriter, r *http.Request, database *database.Resources) {
 func GetAll(w http.ResponseWriter, r *http.Request, database *database.Resources) {
 	vars := mux.Vars(r)
 	resourceName := vars["resource"]
-	resource := database.Get(resourceName)
-	if resource == nil {
-		respondError(w, http.StatusNotFound, fmt.Sprintf("resource %q does not exist", resourceName))
+	resource, ok := resolveResource(w, database, resourceName, true)
+	if !ok {
 		return
 	}
 	respondJSON(w, http.StatusOK, resource.ReadAll())
@@ -44,9 +42,8 @@ func Update(w http.ResponseWriter, r *http.Request, database *database.Resources
 	vars := mux.Vars(r)
 	resourceName := vars["resource"]
 	key := vars["id"]
-	resource := database.Get(resourceName)
-	if resource == nil {
-		respondError(w, http.StatusNotFound, fmt.Sprintf("resource %q does not exist", resourceName))
+	resource, ok := resolveResource(w, database, resourceName, true)
+	if !ok {
 		return
 	}
 	body, err := parseBody(r)
@@ -66,9 +63,8 @@ func Delete(w http.ResponseWriter, r *http.Request, database *database.Resources
 	vars := mux.Vars(r)
 	resourceName := vars["resource"]
 	key := vars["id"]
-	resource := database.Get(resourceName)
-	if resource == nil {
-		respondError(w, http.StatusNotFound, fmt.Sprintf("resource %q does not exist", resourceName))
+	resource, ok := resolveResource(w, database, resourceName, true)
+	if !ok {
 		return
 	}
 	if deleted := resource.Del(key); !deleted {
@@ -81,8 +77,8 @@ func Delete(w http.ResponseWriter, r *http.Request, database *database.Resources
 func Create(w http.ResponseWriter, r *http.Request, database *database.Resources) {
 	vars := mux.Vars(r)
 	resourceName := vars["resource"]
-	resource := database.Get(resourceName)
-	if resource == nil {
+	resource, exists := resolveResource(w, database, resourceName, false)
+	if !exists {
 		if err := database.NewResource(resourceName); err != nil {
 			resource = database.Get(resourceName)
 			if resource == nil {
@@ -127,4 +123,13 @@ func parseBody(r *http.Request) (interface{}, error) {
 		return nil, fmt.Errorf("invalid JSON: %w", err)
 	}
 	return entry, nil
+}
+
+func resolveResource(w http.ResponseWriter, database *database.Resources, resourceName string, respondIfMissing bool) (*database.Entries, bool) {
+	resource := database.Get(resourceName)
+	if resource == nil && respondIfMissing {
+		respondError(w, http.StatusNotFound, fmt.Sprintf("resource %q does not exist", resourceName))
+		return nil, false
+	}
+	return resource, resource != nil
 }
