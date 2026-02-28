@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"log"
 	"net/http"
 	"time"
 
@@ -22,6 +23,7 @@ type ServerConfig struct {
 	WriteTimeout    time.Duration
 	IdleTimeout     time.Duration
 	ShutdownTimeout time.Duration
+	DevMode         bool
 }
 
 func (a *App) Initialize() {
@@ -44,9 +46,18 @@ func (a *App) Run(ctx context.Context, cfg ServerConfig) error {
 		ctx = context.Background()
 	}
 	cfg.normalize()
+	mode := "production"
+	if cfg.DevMode {
+		mode = "development"
+	}
+	log.Printf("AndyDB running on %s (%s mode)", cfg.Addr, mode)
+	handler := http.Handler(a.Router)
+	if cfg.DevMode {
+		handler = a.requestLogger(handler)
+	}
 	srv := &http.Server{
 		Addr:         cfg.Addr,
-		Handler:      a.Router,
+		Handler:      handler,
 		ReadTimeout:  cfg.ReadTimeout,
 		WriteTimeout: cfg.WriteTimeout,
 		IdleTimeout:  cfg.IdleTimeout,
@@ -98,4 +109,11 @@ func (a *App) handleRequest(handler RequestHandlerFunction) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		handler(w, r, a.Database)
 	}
+}
+
+func (a *App) requestLogger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("[DEV] %s %s from %s", r.Method, r.RequestURI, r.RemoteAddr)
+		next.ServeHTTP(w, r)
+	})
 }
