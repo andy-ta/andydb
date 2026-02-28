@@ -11,7 +11,7 @@ import (
 
 const maxRequestBodySize = 1 << 20
 
-func Get(w http.ResponseWriter, r *http.Request, database database.Resources) {
+func Get(w http.ResponseWriter, r *http.Request, database *database.Resources) {
 	vars := mux.Vars(r)
 	resourceName := vars["resource"]
 	key := vars["id"]
@@ -28,7 +28,7 @@ func Get(w http.ResponseWriter, r *http.Request, database database.Resources) {
 	respondJSON(w, http.StatusOK, entry)
 }
 
-func GetAll(w http.ResponseWriter, r *http.Request, database database.Resources) {
+func GetAll(w http.ResponseWriter, r *http.Request, database *database.Resources) {
 	vars := mux.Vars(r)
 	resourceName := vars["resource"]
 	resource := database.Get(resourceName)
@@ -39,7 +39,7 @@ func GetAll(w http.ResponseWriter, r *http.Request, database database.Resources)
 	respondJSON(w, http.StatusOK, resource.ReadAll())
 }
 
-func Update(w http.ResponseWriter, r *http.Request, database database.Resources) {
+func Update(w http.ResponseWriter, r *http.Request, database *database.Resources) {
 	vars := mux.Vars(r)
 	resourceName := vars["resource"]
 	key := vars["id"]
@@ -61,7 +61,7 @@ func Update(w http.ResponseWriter, r *http.Request, database database.Resources)
 	respondJSON(w, http.StatusOK, entry)
 }
 
-func Delete(w http.ResponseWriter, r *http.Request, database database.Resources) {
+func Delete(w http.ResponseWriter, r *http.Request, database *database.Resources) {
 	vars := mux.Vars(r)
 	resourceName := vars["resource"]
 	key := vars["id"]
@@ -77,7 +77,7 @@ func Delete(w http.ResponseWriter, r *http.Request, database database.Resources)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func Create(w http.ResponseWriter, r *http.Request, database database.Resources) {
+func Create(w http.ResponseWriter, r *http.Request, database *database.Resources) {
 	vars := mux.Vars(r)
 	resourceName := vars["resource"]
 	resource := database.Get(resourceName)

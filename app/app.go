@@ -15,7 +15,7 @@ import (
 
 type App struct {
 	Router   *mux.Router
-	Database database.Resources
+	Database *database.Resources
 }
 
 type ServerConfig struct {
@@ -105,7 +105,7 @@ func (cfg *ServerConfig) normalize() {
 	}
 }
 
-type RequestHandlerFunction func(w http.ResponseWriter, r *http.Request, database database.Resources)
+type RequestHandlerFunction func(w http.ResponseWriter, r *http.Request, database *database.Resources)
 
 func (a *App) handleRequest(handler RequestHandlerFunction) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

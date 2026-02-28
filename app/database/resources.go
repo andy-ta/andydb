@@ -10,8 +10,8 @@ type Resources struct {
 	database map[string]*Entries
 }
 
-func NewDatabase() Resources {
-	return Resources{database: make(map[string]*Entries)}
+func NewDatabase() *Resources {
+	return &Resources{database: make(map[string]*Entries)}
 }
 
 func (r *Resources) NewResource(name string) error {
