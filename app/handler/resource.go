@@ -3,10 +3,11 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/andy-ta/andydb/app/database"
-	"github.com/gorilla/mux"
 	"io"
 	"net/http"
+
+	"github.com/andy-ta/andydb/app/database"
+	"github.com/gorilla/mux"
 )
 
 const maxRequestBodySize = 1 << 20

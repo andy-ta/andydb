@@ -1,12 +1,10 @@
 package database
 
 import (
-	b64 "encoding/base64"
 	"fmt"
-	"strconv"
 	"sync"
-	"time"
 
+	"github.com/gofrs/uuid/v5"
 	"github.com/icza/dyno"
 )
 
@@ -22,9 +20,7 @@ func NewEntry() Entries {
 func (e *Entries) Create(value interface{}) interface{} {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	// Generate key
-	now := time.Now().UnixNano()
-	key := b64.StdEncoding.EncodeToString([]byte(strconv.FormatInt(now, 10)))[0:15]
+	key := generateEntryKey()
 	if err := dyno.Set(value, key, "_id"); err != nil {
 		fmt.Printf("Failed to set _id: %v\n", err)
 	}
@@ -64,4 +60,13 @@ func (e *Entries) Del(key string) bool {
 	delete(e.database, key)
 	_, prs := e.database[key]
 	return !prs
+}
+
+func generateEntryKey() string {
+	u, err := uuid.NewV7()
+	if err != nil {
+		fmt.Printf("failed to generate uuid v7: %v\n", err)
+		return uuid.Must(uuid.NewV7()).String()
+	}
+	return u.String()
 }
