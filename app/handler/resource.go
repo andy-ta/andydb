@@ -54,9 +54,9 @@ func Update(w http.ResponseWriter, r *http.Request, database *database.Resources
 		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	entry := resource.Update(key, body)
-	if entry == nil {
-		respondError(w, http.StatusNotFound, fmt.Sprintf("id %q does not exist", key))
+	entry, err := resource.Update(key, body)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	respondJSON(w, http.StatusOK, entry)
@@ -102,7 +102,11 @@ func Create(w http.ResponseWriter, r *http.Request, database *database.Resources
 		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	result := resource.Create(body)
+	result, err := resource.Create(body)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	respondJSON(w, http.StatusCreated, result)
 }
 

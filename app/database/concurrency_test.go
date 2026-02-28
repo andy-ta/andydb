@@ -13,15 +13,25 @@ func TestEntriesConcurrentCreate(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Add(workers)
+	errCh := make(chan error, 1)
 	for i := 0; i < workers; i++ {
 		go func(worker int) {
 			defer wg.Done()
 			for j := 0; j < perWorker; j++ {
-				entry.Create(map[string]interface{}{"worker": worker, "sequence": j})
+				if _, err := entry.Create(map[string]interface{}{"worker": worker, "sequence": j}); err != nil {
+					select {
+					case errCh <- err:
+					default:
+					}
+					return
+				}
 			}
 		}(i)
 	}
 	wg.Wait()
+	if err := drainErr(errCh); err != nil {
+		t.Fatalf("unexpected create error: %v", err)
+	}
 
 	got := len(entry.ReadAll())
 	want := workers * perWorker
@@ -73,20 +83,39 @@ func TestResourcesConcurrentWrites(t *testing.T) {
 	const perWorker = 40
 	var wg sync.WaitGroup
 	wg.Add(workers)
+	errCh := make(chan error, 1)
 	for i := 0; i < workers; i++ {
 		go func(worker int) {
 			defer wg.Done()
 			for j := 0; j < perWorker; j++ {
-				resource.Create(map[string]interface{}{"worker": worker, "sequence": j})
+				if _, err := resource.Create(map[string]interface{}{"worker": worker, "sequence": j}); err != nil {
+					select {
+					case errCh <- err:
+					default:
+					}
+					return
+				}
 				resource.ReadAll()
 			}
 		}(i)
 	}
 	wg.Wait()
+	if err := drainErr(errCh); err != nil {
+		t.Fatalf("unexpected create error: %v", err)
+	}
 
 	total := len(resource.ReadAll())
 	want := workers * perWorker
 	if total != want {
 		t.Fatalf("expected %d records, got %d", want, total)
+	}
+}
+
+func drainErr(errCh <-chan error) error {
+	select {
+	case err := <-errCh:
+		return err
+	default:
+		return nil
 	}
 }

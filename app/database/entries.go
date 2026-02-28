@@ -17,15 +17,15 @@ func NewEntry() Entries {
 	return Entries{database: make(map[string]interface{})}
 }
 
-func (e *Entries) Create(value interface{}) interface{} {
+func (e *Entries) Create(value interface{}) (interface{}, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	key := generateEntryKey()
 	if err := dyno.Set(value, key, "_id"); err != nil {
-		fmt.Printf("Failed to set _id: %v\n", err)
+		return nil, fmt.Errorf("failed to set _id: %w", err)
 	}
 	e.database[key] = value
-	return e.database[key]
+	return e.database[key], nil
 }
 
 func (e *Entries) Read(key string) interface{} {
@@ -44,14 +44,14 @@ func (e *Entries) ReadAll() []interface{} {
 	return values
 }
 
-func (e *Entries) Update(key string, value interface{}) interface{} {
+func (e *Entries) Update(key string, value interface{}) (interface{}, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if err := dyno.Set(value, key, "_id"); err != nil {
-		fmt.Printf("Failed to set _id: %v\n", err)
+		return nil, fmt.Errorf("failed to set _id: %w", err)
 	}
 	e.database[key] = value
-	return e.database[key]
+	return e.database[key], nil
 }
 
 func (e *Entries) Del(key string) bool {
