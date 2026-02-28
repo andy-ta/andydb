@@ -46,7 +46,6 @@ func (a *App) Run(ctx context.Context, cfg ServerConfig) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	cfg.normalize()
 	mode := "production"
 	if cfg.DevMode {
 		mode = "development"
@@ -84,24 +83,6 @@ func (a *App) Run(ctx context.Context, cfg ServerConfig) error {
 			return err
 		}
 		return nil
-	}
-}
-
-func (cfg *ServerConfig) normalize() {
-	if cfg.Addr == "" {
-		cfg.Addr = ":42069"
-	}
-	if cfg.ReadTimeout == 0 {
-		cfg.ReadTimeout = 5 * time.Second
-	}
-	if cfg.WriteTimeout == 0 {
-		cfg.WriteTimeout = 5 * time.Second
-	}
-	if cfg.IdleTimeout == 0 {
-		cfg.IdleTimeout = 120 * time.Second
-	}
-	if cfg.ShutdownTimeout == 0 {
-		cfg.ShutdownTimeout = 5 * time.Second
 	}
 }
 
