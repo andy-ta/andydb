@@ -25,6 +25,17 @@ func (r *Resources) NewResource(name string) error {
 	return nil
 }
 
+func (r *Resources) GetOrCreate(name string) (*Entries, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if existing, ok := r.database[name]; ok {
+		return existing, nil
+	}
+	entry := NewEntry()
+	r.database[name] = &entry
+	return &entry, nil
+}
+
 func (r *Resources) Get(name string) *Entries {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -45,6 +56,5 @@ func (r *Resources) Remove(name string) bool {
 		return false
 	}
 	delete(r.database, name)
-	_, stillExists := r.database[name]
-	return !stillExists
+	return true
 }

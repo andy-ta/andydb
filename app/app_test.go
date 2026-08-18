@@ -1,10 +1,14 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestRecovererReturnsJSONError(t *testing.T) {
@@ -30,5 +34,53 @@ func TestRecovererReturnsJSONError(t *testing.T) {
 	}
 	if body["error"] != "internal server error" {
 		t.Fatalf("unexpected error payload: %#v", body)
+	}
+}
+
+func TestRunGracefulShutdown(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+
+	a := &App{}
+	a.Initialize()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- a.Run(ctx, ServerConfig{
+			Addr:            addr,
+			ReadTimeout:     time.Second,
+			WriteTimeout:    time.Second,
+			IdleTimeout:     time.Second,
+			ShutdownTimeout: 2 * time.Second,
+		})
+	}()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		resp, getErr := http.Get("http://" + addr + "/api/missing")
+		if getErr == nil {
+			resp.Body.Close()
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("server never became ready: %v", getErr)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	cancel()
+	select {
+	case runErr := <-errCh:
+		if !errors.Is(runErr, context.Canceled) {
+			t.Fatalf("expected context.Canceled, got %v", runErr)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Run did not return after cancel")
 	}
 }

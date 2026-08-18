@@ -86,11 +86,11 @@ func (a *App) Run(ctx context.Context, cfg ServerConfig) error {
 	}
 }
 
-type RequestHandlerFunction func(w http.ResponseWriter, r *http.Request, database *database.Resources)
+type RequestHandlerFunction func(w http.ResponseWriter, r *http.Request, db *database.Resources)
 
-func (a *App) handleRequest(handler RequestHandlerFunction) http.HandlerFunc {
+func (a *App) handleRequest(fn RequestHandlerFunction) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		handler(w, r, a.Database)
+		fn(w, r, a.Database)
 	}
 }
 

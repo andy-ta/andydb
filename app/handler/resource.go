@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,11 +13,11 @@ import (
 
 const maxRequestBodySize = 1 << 20
 
-func Get(w http.ResponseWriter, r *http.Request, database *database.Resources) {
+func Get(w http.ResponseWriter, r *http.Request, db *database.Resources) {
 	vars := mux.Vars(r)
 	resourceName := vars["resource"]
 	key := vars["id"]
-	resource, ok := resolveResource(w, database, resourceName, true)
+	resource, ok := resolveResource(w, db, resourceName, true)
 	if !ok {
 		return
 	}
@@ -28,21 +29,21 @@ func Get(w http.ResponseWriter, r *http.Request, database *database.Resources) {
 	respondJSON(w, http.StatusOK, entry)
 }
 
-func GetAll(w http.ResponseWriter, r *http.Request, database *database.Resources) {
+func GetAll(w http.ResponseWriter, r *http.Request, db *database.Resources) {
 	vars := mux.Vars(r)
 	resourceName := vars["resource"]
-	resource, ok := resolveResource(w, database, resourceName, true)
+	resource, ok := resolveResource(w, db, resourceName, true)
 	if !ok {
 		return
 	}
 	respondJSON(w, http.StatusOK, resource.ReadAll())
 }
 
-func Update(w http.ResponseWriter, r *http.Request, database *database.Resources) {
+func Update(w http.ResponseWriter, r *http.Request, db *database.Resources) {
 	vars := mux.Vars(r)
 	resourceName := vars["resource"]
 	key := vars["id"]
-	resource, ok := resolveResource(w, database, resourceName, true)
+	resource, ok := resolveResource(w, db, resourceName, true)
 	if !ok {
 		return
 	}
@@ -53,17 +54,21 @@ func Update(w http.ResponseWriter, r *http.Request, database *database.Resources
 	}
 	entry, err := resource.Update(key, body)
 	if err != nil {
+		if errors.Is(err, database.ErrNotFound) {
+			RespondError(w, http.StatusNotFound, fmt.Sprintf("id %q does not exist", key))
+			return
+		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	respondJSON(w, http.StatusOK, entry)
 }
 
-func Delete(w http.ResponseWriter, r *http.Request, database *database.Resources) {
+func Delete(w http.ResponseWriter, r *http.Request, db *database.Resources) {
 	vars := mux.Vars(r)
 	resourceName := vars["resource"]
 	key := vars["id"]
-	resource, ok := resolveResource(w, database, resourceName, true)
+	resource, ok := resolveResource(w, db, resourceName, true)
 	if !ok {
 		return
 	}
@@ -74,22 +79,11 @@ func Delete(w http.ResponseWriter, r *http.Request, database *database.Resources
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func Create(w http.ResponseWriter, r *http.Request, database *database.Resources) {
+func Create(w http.ResponseWriter, r *http.Request, db *database.Resources) {
 	vars := mux.Vars(r)
 	resourceName := vars["resource"]
-	resource, exists := resolveResource(w, database, resourceName, false)
-	if !exists {
-		if err := database.NewResource(resourceName); err != nil {
-			resource = database.Get(resourceName)
-			if resource == nil {
-				RespondError(w, http.StatusConflict, err.Error())
-				return
-			}
-		} else {
-			resource = database.Get(resourceName)
-		}
-	}
-	if resource == nil {
+	resource, err := db.GetOrCreate(resourceName)
+	if err != nil {
 		RespondError(w, http.StatusInternalServerError, fmt.Sprintf("failed to prepare resource %q", resourceName))
 		return
 	}
@@ -129,8 +123,8 @@ func parseBody(r *http.Request) (map[string]interface{}, error) {
 	return entry, nil
 }
 
-func resolveResource(w http.ResponseWriter, database *database.Resources, resourceName string, respondIfMissing bool) (*database.Entries, bool) {
-	resource := database.Get(resourceName)
+func resolveResource(w http.ResponseWriter, db *database.Resources, resourceName string, respondIfMissing bool) (*database.Entries, bool) {
+	resource := db.Get(resourceName)
 	if resource == nil && respondIfMissing {
 		RespondError(w, http.StatusNotFound, fmt.Sprintf("resource %q does not exist", resourceName))
 		return nil, false

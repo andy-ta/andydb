@@ -1,12 +1,15 @@
 package database
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 
 	"github.com/gofrs/uuid/v5"
 	"github.com/icza/dyno"
 )
+
+var ErrNotFound = errors.New("entry not found")
 
 type Entries struct {
 	mu       sync.RWMutex
@@ -20,6 +23,7 @@ func NewEntry() Entries {
 func (e *Entries) Create(value interface{}) (interface{}, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	stripClientID(value)
 	key, err := generateEntryKey()
 	if err != nil {
 		return nil, err
@@ -50,6 +54,10 @@ func (e *Entries) ReadAll() []interface{} {
 func (e *Entries) Update(key string, value interface{}) (interface{}, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if _, exists := e.database[key]; !exists {
+		return nil, ErrNotFound
+	}
+	stripClientID(value)
 	if err := dyno.Set(value, key, "_id"); err != nil {
 		return nil, fmt.Errorf("failed to set _id: %w", err)
 	}
@@ -66,6 +74,12 @@ func (e *Entries) Del(key string) bool {
 	}
 	delete(e.database, key)
 	return true
+}
+
+func stripClientID(value interface{}) {
+	if entry, ok := value.(map[string]interface{}); ok {
+		delete(entry, "_id")
+	}
 }
 
 func generateEntryKey() (string, error) {
