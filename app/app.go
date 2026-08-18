@@ -42,6 +42,11 @@ func (a *App) setRouters() {
 	r.HandleFunc("/{resource}/{id}", a.handleRequest(handler.Delete)).Methods("DELETE")
 }
 
+var (
+	listenAndServe = func(srv *http.Server) error { return srv.ListenAndServe() }
+	shutdownServer = func(srv *http.Server, ctx context.Context) error { return srv.Shutdown(ctx) }
+)
+
 func (a *App) Run(ctx context.Context, cfg ServerConfig) error {
 	if ctx == nil {
 		ctx = context.Background()
@@ -65,13 +70,13 @@ func (a *App) Run(ctx context.Context, cfg ServerConfig) error {
 	}
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- srv.ListenAndServe()
+		errCh <- listenAndServe(srv)
 	}()
 	select {
 	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 		defer cancel()
-		if err := srv.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := shutdownServer(srv, shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return err
 		}
 		if err := <-errCh; err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -86,11 +91,11 @@ func (a *App) Run(ctx context.Context, cfg ServerConfig) error {
 	}
 }
 
-type RequestHandlerFunction func(w http.ResponseWriter, r *http.Request, database *database.Resources)
+type RequestHandlerFunction func(w http.ResponseWriter, r *http.Request, db *database.Resources)
 
-func (a *App) handleRequest(handler RequestHandlerFunction) http.HandlerFunc {
+func (a *App) handleRequest(fn RequestHandlerFunction) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		handler(w, r, a.Database)
+		fn(w, r, a.Database)
 	}
 }
 

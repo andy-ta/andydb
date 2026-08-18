@@ -2,12 +2,16 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/andy-ta/andydb/app/database"
+	"github.com/gofrs/uuid/v5"
 	"github.com/gorilla/mux"
 )
 
@@ -36,6 +40,19 @@ func TestParseBodyInvalidJSON(t *testing.T) {
 		t.Fatalf("expected invalid JSON error, got %v", err)
 	}
 }
+
+func TestParseBodyReadError(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"andy"}`))
+	req.Body = errReadCloser{}
+	if _, err := parseBody(req); err == nil || !strings.Contains(err.Error(), "failed to read request body") {
+		t.Fatalf("expected read error, got %v", err)
+	}
+}
+
+type errReadCloser struct{}
+
+func (errReadCloser) Read([]byte) (int, error) { return 0, errors.New("read fail") }
+func (errReadCloser) Close() error             { return nil }
 
 func TestParseBodyEmptyBody(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(""))
@@ -227,6 +244,206 @@ func TestCreateInvalidBodyReturnsBadRequest(t *testing.T) {
 	}
 	if got := decodeError(t, rec); !strings.Contains(got, "invalid JSON") {
 		t.Fatalf("expected invalid JSON error, got %q", got)
+	}
+}
+
+func TestCreateIgnoresClientID(t *testing.T) {
+	db := database.NewDatabase()
+	created := createEntry(t, db, "contacts", `{"name":"andy","_id":"client-chosen"}`)
+	id, ok := created["_id"].(string)
+	if !ok || id == "" || id == "client-chosen" {
+		t.Fatalf("expected server-assigned _id, got %#v", created["_id"])
+	}
+	if _, err := uuid.FromString(id); err != nil {
+		t.Fatalf("expected UUID _id, got %q: %v", id, err)
+	}
+
+	missingReq := httptest.NewRequest(http.MethodGet, "/api/contacts/client-chosen", nil)
+	missingReq = mux.SetURLVars(missingReq, map[string]string{"resource": "contacts", "id": "client-chosen"})
+	missingRec := httptest.NewRecorder()
+	Get(missingRec, missingReq, db)
+	if missingRec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for client-chosen id, got %d", missingRec.Code)
+	}
+
+	gotReq := httptest.NewRequest(http.MethodGet, "/api/contacts/"+id, nil)
+	gotReq = mux.SetURLVars(gotReq, map[string]string{"resource": "contacts", "id": id})
+	gotRec := httptest.NewRecorder()
+	Get(gotRec, gotReq, db)
+	if gotRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for minted id, got %d", gotRec.Code)
+	}
+}
+
+func TestUpdateIgnoresClientID(t *testing.T) {
+	db := database.NewDatabase()
+	created := createEntry(t, db, "contacts", `{"name":"andy"}`)
+	id := created["_id"].(string)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/contacts/"+id, strings.NewReader(`{"name":"betty","_id":"other"}`))
+	req = mux.SetURLVars(req, map[string]string{"resource": "contacts", "id": id})
+	rec := httptest.NewRecorder()
+	Update(rec, req, db)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 on update, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	updated := decodeMap(t, rec)
+	if updated["_id"] != id {
+		t.Fatalf("expected server _id to stay %q, got %#v", id, updated["_id"])
+	}
+
+	otherReq := httptest.NewRequest(http.MethodGet, "/api/contacts/other", nil)
+	otherReq = mux.SetURLVars(otherReq, map[string]string{"resource": "contacts", "id": "other"})
+	otherRec := httptest.NewRecorder()
+	Get(otherRec, otherReq, db)
+	if otherRec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for client _id, got %d", otherRec.Code)
+	}
+}
+
+func TestUpdateMissingIDReturnsNotFound(t *testing.T) {
+	db := database.NewDatabase()
+	if err := db.NewResource("contacts"); err != nil {
+		t.Fatalf("failed to create resource: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPut, "/api/contacts/missing-id", strings.NewReader(`{"name":"andy"}`))
+	req = mux.SetURLVars(req, map[string]string{"resource": "contacts", "id": "missing-id"})
+	rec := httptest.NewRecorder()
+	Update(rec, req, db)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for missing id, got %d", rec.Code)
+	}
+	if got := decodeError(t, rec); !strings.Contains(got, "missing-id") {
+		t.Fatalf("expected not-found message to include missing id, got %q", got)
+	}
+	if got := len(db.Get("contacts").ReadAll()); got != 0 {
+		t.Fatalf("PUT of a missing id must not create a row, got %d", got)
+	}
+
+	confirmReq := httptest.NewRequest(http.MethodGet, "/api/contacts/missing-id", nil)
+	confirmReq = mux.SetURLVars(confirmReq, map[string]string{"resource": "contacts", "id": "missing-id"})
+	confirmRec := httptest.NewRecorder()
+	Get(confirmRec, confirmReq, db)
+	if confirmRec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 on follow-up GET, got %d", confirmRec.Code)
+	}
+}
+
+func TestConcurrentCreateSameResource(t *testing.T) {
+	db := database.NewDatabase()
+	const workers = 20
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	codes := make([]int, workers)
+	for i := 0; i < workers; i++ {
+		go func(i int) {
+			defer wg.Done()
+			req := httptest.NewRequest(http.MethodPost, "/api/contacts", strings.NewReader(fmt.Sprintf(`{"n":%d}`, i)))
+			req = mux.SetURLVars(req, map[string]string{"resource": "contacts"})
+			rec := httptest.NewRecorder()
+			Create(rec, req, db)
+			codes[i] = rec.Code
+		}(i)
+	}
+	wg.Wait()
+
+	for i, code := range codes {
+		if code != http.StatusCreated {
+			t.Fatalf("worker %d: expected 201, got %d", i, code)
+		}
+	}
+	resource := db.Get("contacts")
+	if resource == nil {
+		t.Fatal("expected contacts resource")
+	}
+	if got := len(resource.ReadAll()); got != workers {
+		t.Fatalf("expected %d entries, got %d", workers, got)
+	}
+}
+
+func TestRespondJSONMarshalErrorIsJSON(t *testing.T) {
+	rec := httptest.NewRecorder()
+	respondJSON(rec, http.StatusOK, make(chan int))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("expected application/json, got %q", ct)
+	}
+	if got := decodeError(t, rec); !strings.Contains(got, "failed to encode") {
+		t.Fatalf("unexpected error payload: %q", got)
+	}
+}
+
+func TestGetAllMissingResourceReturnsNotFound(t *testing.T) {
+	db := database.NewDatabase()
+	req := httptest.NewRequest(http.MethodGet, "/api/missing", nil)
+	req = mux.SetURLVars(req, map[string]string{"resource": "missing"})
+	rec := httptest.NewRecorder()
+	GetAll(rec, req, db)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rec.Code)
+	}
+	if got := decodeError(t, rec); !strings.Contains(got, "resource \"missing\" does not exist") {
+		t.Fatalf("unexpected error payload: %q", got)
+	}
+}
+
+func TestUpdateMissingResourceReturnsNotFound(t *testing.T) {
+	db := database.NewDatabase()
+	req := httptest.NewRequest(http.MethodPut, "/api/missing/abc", strings.NewReader(`{"name":"andy"}`))
+	req = mux.SetURLVars(req, map[string]string{"resource": "missing", "id": "abc"})
+	rec := httptest.NewRecorder()
+	Update(rec, req, db)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rec.Code)
+	}
+}
+
+func TestDeleteMissingResourceReturnsNotFound(t *testing.T) {
+	db := database.NewDatabase()
+	req := httptest.NewRequest(http.MethodDelete, "/api/missing/abc", nil)
+	req = mux.SetURLVars(req, map[string]string{"resource": "missing", "id": "abc"})
+	rec := httptest.NewRecorder()
+	Delete(rec, req, db)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rec.Code)
+	}
+}
+
+func TestCreateUUIDFailureReturnsInternalError(t *testing.T) {
+	restore := database.OverrideNewUUIDV7(func() (uuid.UUID, error) {
+		return uuid.Nil, errors.New("rand failed")
+	})
+	defer restore()
+
+	db := database.NewDatabase()
+	req := httptest.NewRequest(http.MethodPost, "/api/contacts", strings.NewReader(`{"name":"andy"}`))
+	req = mux.SetURLVars(req, map[string]string{"resource": "contacts"})
+	rec := httptest.NewRecorder()
+	Create(rec, req, db)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d (%s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestUpdateSetFieldFailureReturnsInternalError(t *testing.T) {
+	db := database.NewDatabase()
+	created := createEntry(t, db, "contacts", `{"name":"andy"}`)
+	id := created["_id"].(string)
+
+	restore := database.OverrideSetField(func(interface{}, interface{}, ...interface{}) error {
+		return errors.New("set failed")
+	})
+	defer restore()
+
+	req := httptest.NewRequest(http.MethodPut, "/api/contacts/"+id, strings.NewReader(`{"name":"betty"}`))
+	req = mux.SetURLVars(req, map[string]string{"resource": "contacts", "id": id})
+	rec := httptest.NewRecorder()
+	Update(rec, req, db)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d (%s)", rec.Code, rec.Body.String())
 	}
 }
 

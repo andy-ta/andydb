@@ -13,15 +13,17 @@ After starting `andydb.exe`, you can make simple RESTful CRUD requests to the se
 
 For example, `curl -d '{"email": "andy@andy.db"}' http://localhost:42069/api/contacts` will create the contacts resource
 type (since it does not exist yet) and will save the provided body as an entry of that resource. 
-It will return the created object in JSON format with a new field `_id` (now a UUID v7) that can be used for future operations.
+It will return the created object in JSON format with a new field `_id` (a server-assigned UUID v7) that can be used for future operations.
 Subsequent POST requests to the contacts resource append each entry to that collection.
+A client-supplied `_id` in the body is ignored.
 
-With the `_id` you may now perform a GET / PUT / DELETE requests in the format of:
+IDs are minted only by POST. Use the returned `_id` for GET / PUT / DELETE:
 
 - GET `http://localhost:42069/api/contacts/{_id}`
   - `curl http://localhost:42069/api/contacts/{_id}`
 - PUT `http://localhost:42069/api/contacts/{_id}` 
   - `curl -X PUT -d '{"email": "db@andy.db"}' http://localhost:42069/api/contacts/{_id}`
+  - Replace-only: a missing `{_id}` returns 404 and does not create a row. A body `_id` is ignored.
 - DELETE `http://localhost:42069/api/contacts/{_id}`
 - `curl -X DELETE http://localhost:42069/api/contacts/{_id}`
 
