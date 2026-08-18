@@ -1,38 +1,45 @@
 package database
 
 import (
-	b64 "encoding/base64"
 	"fmt"
+	"sync"
+
+	"github.com/gofrs/uuid/v5"
 	"github.com/icza/dyno"
-	"strconv"
-	"time"
 )
 
 type Entries struct {
+	mu       sync.RWMutex
 	database map[string]interface{}
 }
 
 func NewEntry() Entries {
-	return Entries{make(map[string]interface{})}
+	return Entries{database: make(map[string]interface{})}
 }
 
-func (e *Entries) Create(value interface{}) interface{} {
-	// Generate key
-	now := time.Now().UnixNano()
-	key := b64.StdEncoding.EncodeToString([]byte(strconv.FormatInt(now, 10)))[0:15]
-	// Set ID
+func (e *Entries) Create(value interface{}) (interface{}, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	key, err := generateEntryKey()
+	if err != nil {
+		return nil, err
+	}
 	if err := dyno.Set(value, key, "_id"); err != nil {
-		fmt.Printf("Failed to set _id: %v\n", err)
+		return nil, fmt.Errorf("failed to set _id: %w", err)
 	}
 	e.database[key] = value
-	return e.database[key]
+	return e.database[key], nil
 }
 
 func (e *Entries) Read(key string) interface{} {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	return e.database[key]
 }
 
 func (e *Entries) ReadAll() []interface{} {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	values := make([]interface{}, 0, len(e.database))
 	for _, val := range e.database {
 		values = append(values, val)
@@ -40,17 +47,31 @@ func (e *Entries) ReadAll() []interface{} {
 	return values
 }
 
-func (e *Entries) Update(key string, value interface{}) interface{} {
-	// Set ID
+func (e *Entries) Update(key string, value interface{}) (interface{}, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	if err := dyno.Set(value, key, "_id"); err != nil {
-		fmt.Printf("Failed to set _id: %v\n", err)
+		return nil, fmt.Errorf("failed to set _id: %w", err)
 	}
 	e.database[key] = value
-	return e.database[key]
+	return e.database[key], nil
 }
 
 func (e *Entries) Del(key string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	_, existed := e.database[key]
+	if !existed {
+		return false
+	}
 	delete(e.database, key)
-	_, prs := e.database[key]
-	return !prs
+	return true
+}
+
+func generateEntryKey() (string, error) {
+	u, err := uuid.NewV7()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate uuid v7: %w", err)
+	}
+	return u.String(), nil
 }
