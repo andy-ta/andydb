@@ -25,6 +25,9 @@ func (r *Resources) NewResource(name string) error {
 	return nil
 }
 
+// GetOrCreate returns the named collection, creating it if needed.
+// If a later disk backend is added, this should return an error so
+// persistence failures can be handled by callers.
 func (r *Resources) GetOrCreate(name string) *Entries {
 	r.mu.Lock()
 	defer r.mu.Unlock()
