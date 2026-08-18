@@ -25,15 +25,15 @@ func (r *Resources) NewResource(name string) error {
 	return nil
 }
 
-func (r *Resources) GetOrCreate(name string) (*Entries, error) {
+func (r *Resources) GetOrCreate(name string) *Entries {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if existing, ok := r.database[name]; ok {
-		return existing, nil
+		return existing
 	}
 	entry := NewEntry()
 	r.database[name] = &entry
-	return &entry, nil
+	return &entry
 }
 
 func (r *Resources) Get(name string) *Entries {

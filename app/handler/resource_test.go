@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -39,6 +40,19 @@ func TestParseBodyInvalidJSON(t *testing.T) {
 		t.Fatalf("expected invalid JSON error, got %v", err)
 	}
 }
+
+func TestParseBodyReadError(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"andy"}`))
+	req.Body = errReadCloser{}
+	if _, err := parseBody(req); err == nil || !strings.Contains(err.Error(), "failed to read request body") {
+		t.Fatalf("expected read error, got %v", err)
+	}
+}
+
+type errReadCloser struct{}
+
+func (errReadCloser) Read([]byte) (int, error) { return 0, errors.New("read fail") }
+func (errReadCloser) Close() error             { return nil }
 
 func TestParseBodyEmptyBody(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(""))
@@ -359,6 +373,77 @@ func TestRespondJSONMarshalErrorIsJSON(t *testing.T) {
 	}
 	if got := decodeError(t, rec); !strings.Contains(got, "failed to encode") {
 		t.Fatalf("unexpected error payload: %q", got)
+	}
+}
+
+func TestGetAllMissingResourceReturnsNotFound(t *testing.T) {
+	db := database.NewDatabase()
+	req := httptest.NewRequest(http.MethodGet, "/api/missing", nil)
+	req = mux.SetURLVars(req, map[string]string{"resource": "missing"})
+	rec := httptest.NewRecorder()
+	GetAll(rec, req, db)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rec.Code)
+	}
+	if got := decodeError(t, rec); !strings.Contains(got, "resource \"missing\" does not exist") {
+		t.Fatalf("unexpected error payload: %q", got)
+	}
+}
+
+func TestUpdateMissingResourceReturnsNotFound(t *testing.T) {
+	db := database.NewDatabase()
+	req := httptest.NewRequest(http.MethodPut, "/api/missing/abc", strings.NewReader(`{"name":"andy"}`))
+	req = mux.SetURLVars(req, map[string]string{"resource": "missing", "id": "abc"})
+	rec := httptest.NewRecorder()
+	Update(rec, req, db)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rec.Code)
+	}
+}
+
+func TestDeleteMissingResourceReturnsNotFound(t *testing.T) {
+	db := database.NewDatabase()
+	req := httptest.NewRequest(http.MethodDelete, "/api/missing/abc", nil)
+	req = mux.SetURLVars(req, map[string]string{"resource": "missing", "id": "abc"})
+	rec := httptest.NewRecorder()
+	Delete(rec, req, db)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rec.Code)
+	}
+}
+
+func TestCreateUUIDFailureReturnsInternalError(t *testing.T) {
+	restore := database.OverrideNewUUIDV7(func() (uuid.UUID, error) {
+		return uuid.Nil, errors.New("rand failed")
+	})
+	defer restore()
+
+	db := database.NewDatabase()
+	req := httptest.NewRequest(http.MethodPost, "/api/contacts", strings.NewReader(`{"name":"andy"}`))
+	req = mux.SetURLVars(req, map[string]string{"resource": "contacts"})
+	rec := httptest.NewRecorder()
+	Create(rec, req, db)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d (%s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestUpdateSetFieldFailureReturnsInternalError(t *testing.T) {
+	db := database.NewDatabase()
+	created := createEntry(t, db, "contacts", `{"name":"andy"}`)
+	id := created["_id"].(string)
+
+	restore := database.OverrideSetField(func(interface{}, interface{}, ...interface{}) error {
+		return errors.New("set failed")
+	})
+	defer restore()
+
+	req := httptest.NewRequest(http.MethodPut, "/api/contacts/"+id, strings.NewReader(`{"name":"betty"}`))
+	req = mux.SetURLVars(req, map[string]string{"resource": "contacts", "id": id})
+	rec := httptest.NewRecorder()
+	Update(rec, req, db)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d (%s)", rec.Code, rec.Body.String())
 	}
 }
 

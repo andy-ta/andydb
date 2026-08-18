@@ -2,6 +2,7 @@ package database
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/gofrs/uuid/v5"
@@ -94,6 +95,70 @@ func TestEntriesUpdatePreservesServerID(t *testing.T) {
 	}
 	if entries.Read("other") != nil {
 		t.Fatal("Update must not create a row at the client _id")
+	}
+}
+
+func TestEntriesCreateRejectsNonObject(t *testing.T) {
+	entries := NewEntry()
+	got, err := entries.Create("not-an-object")
+	if err == nil || !strings.Contains(err.Error(), "failed to set _id") {
+		t.Fatalf("expected set _id error, got %v", err)
+	}
+	if got != nil {
+		t.Fatalf("expected nil result, got %#v", got)
+	}
+}
+
+func TestEntriesUpdateRejectsNonObject(t *testing.T) {
+	entries := NewEntry()
+	created, err := entries.Create(map[string]interface{}{"name": "andy"})
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	id := mustServerID(t, mustEntryMap(t, created))
+	got, err := entries.Update(id, "not-an-object")
+	if err == nil || !strings.Contains(err.Error(), "failed to set _id") {
+		t.Fatalf("expected set _id error, got %v", err)
+	}
+	if got != nil {
+		t.Fatalf("expected nil result, got %#v", got)
+	}
+}
+
+func TestOverrideSetField(t *testing.T) {
+	restore := OverrideSetField(func(interface{}, interface{}, ...interface{}) error {
+		return errors.New("forced")
+	})
+	defer restore()
+
+	entries := NewEntry()
+	if _, err := entries.Create(map[string]interface{}{"name": "andy"}); err == nil || !strings.Contains(err.Error(), "forced") {
+		t.Fatalf("expected forced set error, got %v", err)
+	}
+}
+
+func TestGenerateEntryKeyError(t *testing.T) {
+	restore := OverrideNewUUIDV7(func() (uuid.UUID, error) {
+		return uuid.Nil, errors.New("rand failed")
+	})
+	defer restore()
+
+	if _, err := generateEntryKey(); err == nil || !strings.Contains(err.Error(), "failed to generate uuid v7") {
+		t.Fatalf("expected uuid error, got %v", err)
+	}
+	entries := NewEntry()
+	if _, err := entries.Create(map[string]interface{}{"name": "andy"}); err == nil || !strings.Contains(err.Error(), "failed to generate uuid v7") {
+		t.Fatalf("expected create uuid error, got %v", err)
+	}
+}
+
+func TestNewResourceAlreadyExists(t *testing.T) {
+	db := NewDatabase()
+	if err := db.NewResource("contacts"); err != nil {
+		t.Fatalf("NewResource failed: %v", err)
+	}
+	if err := db.NewResource("contacts"); err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("expected already exists, got %v", err)
 	}
 }
 

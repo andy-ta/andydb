@@ -82,11 +82,7 @@ func Delete(w http.ResponseWriter, r *http.Request, db *database.Resources) {
 func Create(w http.ResponseWriter, r *http.Request, db *database.Resources) {
 	vars := mux.Vars(r)
 	resourceName := vars["resource"]
-	resource, err := db.GetOrCreate(resourceName)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, fmt.Sprintf("failed to prepare resource %q", resourceName))
-		return
-	}
+	resource := db.GetOrCreate(resourceName)
 	body, err := parseBody(r)
 	if err != nil {
 		RespondError(w, http.StatusBadRequest, err.Error())

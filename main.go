@@ -13,11 +13,23 @@ import (
 	"github.com/andy-ta/andydb/app"
 )
 
+var (
+	lookupEnv     = os.Getenv
+	arg0          = func() string { return os.Args[0] }
+	fatalf        = log.Fatalf
+	notifyContext = signal.NotifyContext
+	startServer   = func(ctx context.Context, cfg app.ServerConfig) error {
+		server := &app.App{}
+		server.Initialize()
+		return server.Run(ctx, cfg)
+	}
+)
+
 func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, stop := notifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	envMode := os.Getenv("ANDYDB_ENV")
+	envMode := lookupEnv("ANDYDB_ENV")
 	devMode := strings.EqualFold(envMode, "dev")
 	if envMode == "" && runningUnderGoRun() {
 		devMode = true
@@ -31,13 +43,11 @@ func main() {
 		DevMode:         devMode,
 	}
 
-	server := &app.App{}
-	server.Initialize()
-	if err := server.Run(ctx, cfg); err != nil && !errors.Is(err, context.Canceled) {
-		log.Fatalf("server terminated: %v", err)
+	if err := startServer(ctx, cfg); err != nil && !errors.Is(err, context.Canceled) {
+		fatalf("server terminated: %v", err)
 	}
 }
 
 func runningUnderGoRun() bool {
-	return strings.Contains(os.Args[0], "go-build")
+	return strings.Contains(arg0(), "go-build")
 }

@@ -7,10 +7,7 @@ import (
 
 func TestGetOrCreateNew(t *testing.T) {
 	db := NewDatabase()
-	resource, err := db.GetOrCreate("contacts")
-	if err != nil {
-		t.Fatalf("GetOrCreate failed: %v", err)
-	}
+	resource := db.GetOrCreate("contacts")
 	if resource == nil {
 		t.Fatal("expected resource")
 	}
@@ -28,10 +25,7 @@ func TestGetOrCreateExisting(t *testing.T) {
 		t.Fatalf("NewResource failed: %v", err)
 	}
 	first := db.Get("contacts")
-	second, err := db.GetOrCreate("contacts")
-	if err != nil {
-		t.Fatalf("GetOrCreate failed: %v", err)
-	}
+	second := db.GetOrCreate("contacts")
 	if first != second {
 		t.Fatal("GetOrCreate must return the existing collection")
 	}
@@ -69,12 +63,7 @@ func TestGetOrCreateConcurrentSameName(t *testing.T) {
 	for i := 0; i < workers; i++ {
 		go func(i int) {
 			defer wg.Done()
-			resource, err := db.GetOrCreate("contacts")
-			if err != nil {
-				t.Errorf("GetOrCreate failed: %v", err)
-				return
-			}
-			got[i] = resource
+			got[i] = db.GetOrCreate("contacts")
 		}(i)
 	}
 	wg.Wait()

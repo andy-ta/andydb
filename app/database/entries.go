@@ -11,6 +11,11 @@ import (
 
 var ErrNotFound = errors.New("entry not found")
 
+var (
+	newUUIDV7 = uuid.NewV7
+	setField  = dyno.Set
+)
+
 type Entries struct {
 	mu       sync.RWMutex
 	database map[string]interface{}
@@ -28,7 +33,7 @@ func (e *Entries) Create(value interface{}) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := dyno.Set(value, key, "_id"); err != nil {
+	if err := setField(value, key, "_id"); err != nil {
 		return nil, fmt.Errorf("failed to set _id: %w", err)
 	}
 	e.database[key] = value
@@ -58,7 +63,7 @@ func (e *Entries) Update(key string, value interface{}) (interface{}, error) {
 		return nil, ErrNotFound
 	}
 	stripClientID(value)
-	if err := dyno.Set(value, key, "_id"); err != nil {
+	if err := setField(value, key, "_id"); err != nil {
 		return nil, fmt.Errorf("failed to set _id: %w", err)
 	}
 	e.database[key] = value
@@ -83,9 +88,21 @@ func stripClientID(value interface{}) {
 }
 
 func generateEntryKey() (string, error) {
-	u, err := uuid.NewV7()
+	u, err := newUUIDV7()
 	if err != nil {
 		return "", fmt.Errorf("failed to generate uuid v7: %w", err)
 	}
 	return u.String(), nil
+}
+
+func OverrideNewUUIDV7(fn func() (uuid.UUID, error)) func() {
+	prev := newUUIDV7
+	newUUIDV7 = fn
+	return func() { newUUIDV7 = prev }
+}
+
+func OverrideSetField(fn func(v, value interface{}, path ...interface{}) error) func() {
+	prev := setField
+	setField = fn
+	return func() { setField = prev }
 }
