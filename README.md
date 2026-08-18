@@ -30,7 +30,7 @@ If you don't provide the id for a GET request, it will return all entries of the
 ## Development hints
 
 - Run `ANDYDB_ENV=dev go run .` (or omit the env var when using `go run .`, it defaults to dev) so the server logs every request and emits the startup banner with the current mode.
-- The server already enforces a 1 MB JSON body limit, trims malformed bodies, and wraps every handler with recovery middleware, so panicked handlers just return 500s.
+- The server already enforces a 1 MB JSON body limit, rejects malformed bodies, and wraps every handler with recovery middleware, so panicked handlers just return 500s.
 - The in-memory datastore now uses mutex guards plus UUID v7 keys and has race-tested coverage in `app/database/concurrency_test.go`.
 - Graceful shutdown is wired through `signal.NotifyContext`, so `Ctrl+C` closes the HTTP listener cleanly.
 

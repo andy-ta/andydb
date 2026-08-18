@@ -17,8 +17,7 @@ func TestParseBodyValidJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseBody returned error: %v", err)
 	}
-	m, ok := body.(map[string]interface{})
-	if !ok || m["name"] != "andy" {
+	if body["name"] != "andy" {
 		t.Fatalf("unexpected body: %#v", body)
 	}
 }
@@ -42,6 +41,16 @@ func TestParseBodyEmptyBody(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(""))
 	if _, err := parseBody(req); err == nil || !strings.Contains(err.Error(), "empty") {
 		t.Fatalf("expected empty body error, got %v", err)
+	}
+}
+
+func TestParseBodyRequiresJSONObject(t *testing.T) {
+	cases := []string{`["not","an","object"]`, `"string"`, `42`, `true`, `null`}
+	for _, payload := range cases {
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(payload))
+		if _, err := parseBody(req); err == nil || !strings.Contains(err.Error(), "JSON object") {
+			t.Fatalf("payload %s: expected JSON object error, got %v", payload, err)
+		}
 	}
 }
 
@@ -149,6 +158,59 @@ func TestCRUDHandlers(t *testing.T) {
 	confirmErr := decodeError(t, confirmRec)
 	if !strings.Contains(confirmErr, first["_id"].(string)) {
 		t.Fatalf("expected not-found message to include missing id, got %q", confirmErr)
+	}
+}
+
+func TestCreateNonObjectBodyReturnsBadRequest(t *testing.T) {
+	db := database.NewDatabase()
+	req := httptest.NewRequest(http.MethodPost, "/api/contacts", strings.NewReader(`["not","an","object"]`))
+	req = mux.SetURLVars(req, map[string]string{"resource": "contacts"})
+	rec := httptest.NewRecorder()
+
+	Create(rec, req, db)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for non-object create body, got %d", rec.Code)
+	}
+	if got := decodeError(t, rec); !strings.Contains(got, "JSON object") {
+		t.Fatalf("expected JSON object error, got %q", got)
+	}
+}
+
+func TestUpdateNonObjectBodyReturnsBadRequest(t *testing.T) {
+	db := database.NewDatabase()
+	created := createEntry(t, db, "contacts", `{"name":"andy"}`)
+	id := created["_id"].(string)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/contacts/"+id, strings.NewReader(`42`))
+	req = mux.SetURLVars(req, map[string]string{"resource": "contacts", "id": id})
+	rec := httptest.NewRecorder()
+	Update(rec, req, db)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for non-object update body, got %d", rec.Code)
+	}
+	if got := decodeError(t, rec); !strings.Contains(got, "JSON object") {
+		t.Fatalf("expected JSON object error, got %q", got)
+	}
+}
+
+func TestDeleteMissingIDReturnsNotFound(t *testing.T) {
+	db := database.NewDatabase()
+	if err := db.NewResource("contacts"); err != nil {
+		t.Fatalf("failed to create resource: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/contacts/missing-id", nil)
+	req = mux.SetURLVars(req, map[string]string{"resource": "contacts", "id": "missing-id"})
+	rec := httptest.NewRecorder()
+	Delete(rec, req, db)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for missing id, got %d", rec.Code)
+	}
+	if got := decodeError(t, rec); !strings.Contains(got, "missing-id") {
+		t.Fatalf("expected not-found message to include missing id, got %q", got)
 	}
 }
 

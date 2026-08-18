@@ -20,7 +20,10 @@ func NewEntry() Entries {
 func (e *Entries) Create(value interface{}) (interface{}, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	key := generateEntryKey()
+	key, err := generateEntryKey()
+	if err != nil {
+		return nil, err
+	}
 	if err := dyno.Set(value, key, "_id"); err != nil {
 		return nil, fmt.Errorf("failed to set _id: %w", err)
 	}
@@ -57,16 +60,18 @@ func (e *Entries) Update(key string, value interface{}) (interface{}, error) {
 func (e *Entries) Del(key string) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	_, existed := e.database[key]
+	if !existed {
+		return false
+	}
 	delete(e.database, key)
-	_, prs := e.database[key]
-	return !prs
+	return true
 }
 
-func generateEntryKey() string {
+func generateEntryKey() (string, error) {
 	u, err := uuid.NewV7()
 	if err != nil {
-		fmt.Printf("failed to generate uuid v7: %v\n", err)
-		return uuid.Must(uuid.NewV7()).String()
+		return "", fmt.Errorf("failed to generate uuid v7: %w", err)
 	}
-	return u.String()
+	return u.String(), nil
 }
